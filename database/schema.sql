@@ -1,0 +1,2 @@
+-- Copia aquí el schema.sql de NovaSalud antes de crear las tablas.
+-- La base esperada por .env es `novasalud`.
