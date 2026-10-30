@@ -5,6 +5,89 @@
 
 ### 1. Listar productos como admin
 GET {{baseUrl}}/api/productos?page=1&limit=20
+
+### 10. Buscar clientes
+GET {{baseUrl}}/api/clientes?q=María
+Authorization: Bearer {{adminToken}}
+
+### 13. Turno actual
+GET {{baseUrl}}/api/turnos/actual
+Authorization: Bearer {{adminToken}}
+
+### 14. Abrir turno
+POST {{baseUrl}}/api/turnos/abrir
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+	"fondo_inicial": 100.00
+}
+
+### 15. Cerrar turno
+POST {{baseUrl}}/api/turnos/cerrar
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+	"efectivo_contado": 100.00
+}
+
+### 16. Abrir caja para probar ventas
+POST {{baseUrl}}/api/turnos/abrir
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+	"fondo_inicial": 100.00
+}
+
+### 17. Crear venta pagada
+POST {{baseUrl}}/api/ventas
+Authorization: Bearer {{adminToken}}
+Idempotency-Key: venta-prueba-001
+Content-Type: application/json
+
+{
+	"cliente_id": null,
+	"comprobante": "boleta",
+	"estado": "pagada",
+	"items": [{ "producto_id": 1, "cantidad": 1 }],
+	"pagos": [{ "metodo": "efectivo", "monto": 1.00 }]
+}
+
+### 18. Listar ventas
+GET {{baseUrl}}/api/ventas?page=1&limit=20
+Authorization: Bearer {{adminToken}}
+
+### 19. Detalle de venta
+GET {{baseUrl}}/api/ventas/1
+Authorization: Bearer {{adminToken}}
+
+### 20. Resumen del dashboard
+GET {{baseUrl}}/api/resumen
+Authorization: Bearer {{adminToken}}
+
+### 11. Crear cliente DNI
+POST {{baseUrl}}/api/clientes
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+	"tipo_doc": "DNI",
+	"numero_doc": "73456789",
+	"nombre": "Ana Sofía Castillo"
+}
+
+### 12. Crear cliente RUC
+POST {{baseUrl}}/api/clientes
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+	"tipo_doc": "RUC",
+	"numero_doc": "20567891234",
+	"nombre": "Distribuidora Vida Saludable E.I.R.L."
+}
 Authorization: Bearer {{adminToken}}
 
 ### 2. Buscar y paginar productos
