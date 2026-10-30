@@ -2,6 +2,8 @@ import express from 'express'
 import cors from 'cors'
 import { config } from './config.js'
 import authRoutes from './routes/auth.js'
+import productosRoutes from './routes/productos.js'
+import avisosRoutes from './routes/avisos.js'
 import { notFound, errorHandler } from './middlewares/errores.js'
 
 const app = express()
@@ -9,6 +11,8 @@ app.use(cors({ origin: config.corsOrigin, allowedHeaders: ['Authorization', 'Con
 app.use(express.json())
 app.get('/health', (request, response) => response.json({ ok: true }))
 app.use('/api/auth', authRoutes)
+app.use('/api/productos', productosRoutes)
+app.use('/api/avisos-stock', avisosRoutes)
 app.use(notFound)
 app.use(errorHandler)
 export default app

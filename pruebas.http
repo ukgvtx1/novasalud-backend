@@ -1,0 +1,76 @@
+@baseUrl = http://localhost:3006
+@adminToken = PEGA_AQUI_EL_TOKEN_DE_ADMIN
+@trabajadorToken = PEGA_AQUI_EL_TOKEN_DE_TRABAJADOR
+@productoId = 1
+
+### 1. Listar productos como admin
+GET {{baseUrl}}/api/productos?page=1&limit=20
+Authorization: Bearer {{adminToken}}
+
+### 2. Buscar y paginar productos
+GET {{baseUrl}}/api/productos?q=para&page=1&limit=5
+Authorization: Bearer {{adminToken}}
+
+### 3. Crear producto como admin
+POST {{baseUrl}}/api/productos
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+	"codigo": "MED-TEST-001",
+	"nombre": "Producto de prueba",
+	"presentacion": "Caja x10",
+	"precio": 2.50,
+	"stock_minimo": 15,
+	"requiere_receta": false
+}
+
+### 4. Editar producto como admin
+PUT {{baseUrl}}/api/productos/{{productoId}}
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+	"codigo": "MED-TEST-001",
+	"nombre": "Producto actualizado",
+	"presentacion": "Caja x20",
+	"precio": 3.75,
+	"stock_minimo": 20,
+	"requiere_receta": true
+}
+
+### 5. Dar de baja producto como admin
+DELETE {{baseUrl}}/api/productos/{{productoId}}
+Authorization: Bearer {{adminToken}}
+
+### 6. Reponer lote como admin
+POST {{baseUrl}}/api/productos/{{productoId}}/lotes
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+	"numero_lote": "L2405",
+	"vencimiento": "2027-03-31",
+	"cantidad": 100
+}
+
+### 7. Consultar avisos
+GET {{baseUrl}}/api/avisos-stock
+Authorization: Bearer {{adminToken}}
+
+### 8. Trabajador no puede crear productos (esperado: 403)
+POST {{baseUrl}}/api/productos
+Authorization: Bearer {{trabajadorToken}}
+Content-Type: application/json
+
+{
+	"codigo": "MED-NO-001",
+	"nombre": "No autorizado",
+	"presentacion": "Unidad",
+	"precio": 1,
+	"stock_minimo": 1,
+	"requiere_receta": false
+}
+
+### 9. Sin token (esperado: 401)
+GET {{baseUrl}}/api/productos?page=1&limit=20
