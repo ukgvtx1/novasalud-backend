@@ -41,30 +41,46 @@ export const obtener = async (request, response) => {
     }
 
     const [turnos] = await connection.execute(
-      `SELECT id, apertura, fondo_inicial
+      `SELECT id, apertura, fondo_inicial, franja
        FROM turnos_caja WHERE usuario_id = ? AND estado = 'abierta'
        ORDER BY id DESC LIMIT 1`,
       [request.usuario.id]
     )
     const turno = turnos[0]
-    const [ventas] = await connection.execute(
-      `SELECT COALESCE(SUM(total), 0) AS monto, COUNT(*) AS tickets
-       FROM ventas
-       WHERE usuario_id = ? AND estado = 'pagada' AND fecha >= CURDATE() AND fecha < CURDATE() + INTERVAL 1 DAY`,
-      [request.usuario.id]
-    )
-    const [digitales] = await connection.execute(
-      `SELECT COALESCE(SUM(p.monto), 0) AS monto
-       FROM pagos p INNER JOIN ventas v ON v.id = p.venta_id
-       WHERE v.usuario_id = ? AND v.estado = 'pagada'
-         AND v.fecha >= CURDATE() AND v.fecha < CURDATE() + INTERVAL 1 DAY
-         AND p.metodo <> 'efectivo'`,
-      [request.usuario.id]
-    )
-    const [espera] = await connection.execute(
-      "SELECT COUNT(*) AS cantidad FROM ventas WHERE usuario_id = ? AND estado = 'espera'",
-      [request.usuario.id]
-    )
+    const ventas = [{ monto: 0, tickets: 0 }]
+    const digitales = [{ monto: 0 }]
+    const espera = [{ cantidad: 0 }]
+    if (turno) {
+      const [ultimoNocturno] = await connection.execute(
+        `SELECT COALESCE(MAX(cierre), CURDATE()) AS inicio_operativo
+         FROM turnos_caja
+         WHERE usuario_id = ? AND estado = 'cerrada' AND franja = 'noche'`,
+        [request.usuario.id]
+      )
+      const inicioOperativo = ultimoNocturno[0].inicio_operativo
+      const [ventasOperativas] = await connection.execute(
+        `SELECT COALESCE(SUM(total), 0) AS monto, COUNT(*) AS tickets
+         FROM ventas
+         WHERE usuario_id = ? AND turno_id IS NOT NULL AND estado = 'pagada'
+           AND fecha > ? AND fecha <= CURRENT_TIMESTAMP`,
+        [request.usuario.id, inicioOperativo]
+      )
+      const [digitalesOperativos] = await connection.execute(
+        `SELECT COALESCE(SUM(p.monto), 0) AS monto
+         FROM pagos p INNER JOIN ventas v ON v.id = p.venta_id
+         WHERE v.usuario_id = ? AND v.turno_id IS NOT NULL AND v.estado = 'pagada'
+           AND v.fecha > ? AND v.fecha <= CURRENT_TIMESTAMP
+           AND p.metodo <> 'efectivo'`,
+        [request.usuario.id, inicioOperativo]
+      )
+      const [esperaOperativa] = await connection.execute(
+        "SELECT COUNT(*) AS cantidad FROM ventas WHERE usuario_id = ? AND turno_id = ? AND estado = 'espera'",
+        [request.usuario.id, turno.id]
+      )
+      ventas[0] = ventasOperativas[0]
+      digitales[0] = digitalesOperativos[0]
+      espera[0] = esperaOperativa[0]
+    }
     let efectivoEnCaja = 0
     if (turno) {
       const [efectivo] = await connection.execute(
@@ -77,7 +93,7 @@ export const obtener = async (request, response) => {
     }
     return {
       rol: 'trabajador',
-      turno: turno ? { id: turno.id, apertura: fechaHoraConOffset(turno.apertura) } : null,
+      turno: turno ? { id: turno.id, apertura: fechaHoraConOffset(turno.apertura), franja: turno.franja } : null,
       ventas_hoy: { monto: dinero(ventas[0].monto), tickets: Number(ventas[0].tickets) },
       efectivo_en_caja: dinero(efectivoEnCaja),
       pagos_digitales: dinero(digitales[0].monto),

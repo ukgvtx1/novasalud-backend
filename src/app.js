@@ -8,6 +8,7 @@ import clientesRoutes from './routes/clientes.js'
 import turnosRoutes from './routes/turnos.js'
 import ventasRoutes from './routes/ventas.js'
 import resumenRoutes from './routes/resumen.js'
+import reportesRoutes from './routes/reportes.js'
 import { notFound, errorHandler } from './middlewares/errores.js'
 
 const app = express()
@@ -21,6 +22,7 @@ app.use('/api/clientes', clientesRoutes)
 app.use('/api/turnos', turnosRoutes)
 app.use('/api/ventas', ventasRoutes)
 app.use('/api/resumen', resumenRoutes)
+app.use('/api/reportes', reportesRoutes)
 app.use(notFound)
 app.use(errorHandler)
 export default app

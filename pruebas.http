@@ -20,7 +20,9 @@ Authorization: Bearer {{adminToken}}
 Content-Type: application/json
 
 {
-	"fondo_inicial": 100.00
+	"fondo_inicial": 100.00,
+	"franja": "noche",
+	"usuario_dni": "00000000"
 }
 
 ### 15. Cerrar turno
@@ -38,7 +40,9 @@ Authorization: Bearer {{adminToken}}
 Content-Type: application/json
 
 {
-	"fondo_inicial": 100.00
+	"fondo_inicial": 100.00,
+	"franja": "mañana",
+	"usuario_dni": "00000000"
 }
 
 ### 17. Crear venta pagada

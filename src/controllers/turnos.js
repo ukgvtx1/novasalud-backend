@@ -3,12 +3,16 @@ import { AppError } from '../middlewares/errores.js'
 import { fechaHoraConOffset } from '../utils/fechas.js'
 
 const dinero = (valor) => Number(Number(valor || 0).toFixed(2))
+const FRANJAS = ['mañana', 'tarde', 'noche']
 
 const turnoRespuesta = (fila) => ({
   id: fila.id,
   apertura: fechaHoraConOffset(fila.apertura),
   fondo_inicial: dinero(fila.fondo_inicial),
-  estado: fila.estado
+  estado: fila.estado,
+  franja: fila.franja,
+  usuario_dni: fila.usuario_dni || null,
+  usuario_nombre: fila.usuario_nombre
 })
 
 const validarMonto = (valor, campo) => {
@@ -19,23 +23,27 @@ const validarMonto = (valor, campo) => {
 
 export const actual = async (request, response) => {
   const [rows] = await withConnection((connection) => connection.execute(
-    `SELECT id, apertura, fondo_inicial, estado
-     FROM turnos_caja
-     WHERE usuario_id = ? AND estado = 'abierta'
-     ORDER BY id DESC LIMIT 1`,
+    `SELECT t.id, t.apertura, t.fondo_inicial, t.estado, t.franja,
+            u.dni AS usuario_dni, u.nombre AS usuario_nombre
+     FROM turnos_caja t INNER JOIN usuarios u ON u.id = t.usuario_id
+     WHERE t.usuario_id = ? AND t.estado = 'abierta'
+     ORDER BY t.id DESC LIMIT 1`,
     [request.usuario.id]
   ))
   response.json(rows[0] ? turnoRespuesta(rows[0]) : null)
 }
 
 export const abrir = async (request, response) => {
-  const { fondo_inicial: fondoInicial } = request.body || {}
+  const { fondo_inicial: fondoInicial, franja } = request.body || {}
   validarMonto(fondoInicial, 'fondo_inicial')
+  if (!FRANJAS.includes(franja)) {
+    throw new AppError('VALIDACION', 'franja debe ser mañana, tarde o noche.', 400)
+  }
   const turno = await withConnection(async (connection) => {
     await connection.beginTransaction()
     try {
       const [usuario] = await connection.execute(
-        'SELECT id FROM usuarios WHERE id = ? AND activo = 1 FOR UPDATE',
+        'SELECT id, dni, nombre FROM usuarios WHERE id = ? AND activo = 1 FOR UPDATE',
         [request.usuario.id]
       )
       if (!usuario[0]) throw new AppError('TOKEN_INVALIDO', 'El usuario del token ya no está activo.', 401)
@@ -45,11 +53,14 @@ export const abrir = async (request, response) => {
       )
       if (abiertos[0]) throw new AppError('VALIDACION', 'Ya tienes un turno abierto.', 400)
       const [result] = await connection.execute(
-        'INSERT INTO turnos_caja (usuario_id, fondo_inicial) VALUES (?, ?)',
-        [request.usuario.id, fondoInicial]
+        'INSERT INTO turnos_caja (usuario_id, fondo_inicial, franja) VALUES (?, ?, ?)',
+        [request.usuario.id, fondoInicial, franja]
       )
       const [rows] = await connection.execute(
-        'SELECT id, apertura, fondo_inicial, estado FROM turnos_caja WHERE id = ?',
+        `SELECT t.id, t.apertura, t.fondo_inicial, t.estado, t.franja,
+                u.dni AS usuario_dni, u.nombre AS usuario_nombre
+         FROM turnos_caja t INNER JOIN usuarios u ON u.id = t.usuario_id
+         WHERE t.id = ?`,
         [result.insertId]
       )
       await connection.commit()
@@ -69,7 +80,7 @@ export const cerrar = async (request, response) => {
     await connection.beginTransaction()
     try {
       const [turnos] = await connection.execute(
-        `SELECT id, fondo_inicial
+        `SELECT id, fondo_inicial, franja
          FROM turnos_caja
          WHERE usuario_id = ? AND estado = 'abierta'
          ORDER BY id DESC LIMIT 1 FOR UPDATE`,
@@ -93,7 +104,13 @@ export const cerrar = async (request, response) => {
         [efectivoEsperado, efectivoContado, turno.id]
       )
       await connection.commit()
-      return { efectivo_esperado: efectivoEsperado, efectivo_contado: dinero(efectivoContado), diferencia }
+      return {
+        turno_id: turno.id,
+        franja: turno.franja,
+        efectivo_esperado: efectivoEsperado,
+        efectivo_contado: dinero(efectivoContado),
+        diferencia
+      }
     } catch (error) {
       await connection.rollback()
       throw error

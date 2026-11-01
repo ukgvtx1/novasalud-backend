@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS usuarios (
 	email VARCHAR(100) NOT NULL UNIQUE,
 	password_hash VARCHAR(255) NOT NULL,
 	rol ENUM('admin','trabajador') NOT NULL DEFAULT 'trabajador',
+	dni VARCHAR(8) NULL,
 	activo TINYINT(1) NOT NULL DEFAULT 1,
 	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 	updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
@@ -53,6 +54,7 @@ CREATE TABLE IF NOT EXISTS turnos_caja (
 	apertura DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	cierre DATETIME NULL,
 	fondo_inicial DECIMAL(10,2) NOT NULL DEFAULT 0,
+	franja ENUM('mañana','tarde','noche') NOT NULL DEFAULT 'mañana',
 	efectivo_esperado DECIMAL(10,2) NULL,
 	efectivo_contado DECIMAL(10,2) NULL,
 	estado ENUM('abierta','cerrada') NOT NULL DEFAULT 'abierta',
