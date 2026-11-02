@@ -102,8 +102,8 @@ const descontarFefo = async (connection, productoId, cantidad) => {
 
 const obtenerVenta = async (connection, id) => {
   const [ventas] = await connection.execute(
-    `SELECT v.id, v.serie_numero, v.fecha, v.comprobante, v.estado, v.subtotal, v.igv, v.total, v.vuelto, v.usuario_id,
-            c.id AS cliente_id
+        `SELECT v.id, v.serie_numero, v.fecha, v.comprobante, v.estado, v.subtotal, v.igv, v.total, v.vuelto, v.usuario_id,
+          v.turno_id, c.id AS cliente_id, c.nombre AS cliente_nombre
      FROM ventas v LEFT JOIN clientes c ON c.id = v.cliente_id WHERE v.id = ? LIMIT 1`,
     [id]
   )
@@ -123,6 +123,8 @@ const obtenerVenta = async (connection, id) => {
     id: venta.id,
     serie_numero: venta.serie_numero,
     fecha: fechaHoraConOffset(venta.fecha),
+    turno_id: venta.turno_id,
+    cliente: venta.cliente_nombre || null,
     comprobante: venta.comprobante,
     estado: venta.estado,
     items: items.map((item) => ({ ...item, cantidad: Number(item.cantidad), precio_unitario: Number(item.precio_unitario), subtotal: Number(item.subtotal) })),
@@ -231,10 +233,11 @@ export const listar = async (request, response) => {
   const [count] = await pool.execute(`SELECT COUNT(*) AS total FROM ventas v ${where}`, params)
   const offset = (page - 1) * limit
   const [rows] = await pool.execute(
-    `SELECT v.id, v.serie_numero, v.fecha,
+    `SELECT v.id, v.serie_numero, v.fecha, v.turno_id, c.nombre AS cliente,
        CASE WHEN COUNT(DISTINCT p.metodo) > 1 THEN 'mixto' ELSE MAX(p.metodo) END AS metodo_pago,
        v.total, v.estado${own ? '' : ', u.nombre AS usuario_nombre'}
-     FROM ventas v LEFT JOIN pagos p ON p.venta_id = v.id INNER JOIN usuarios u ON u.id = v.usuario_id
+    FROM ventas v LEFT JOIN pagos p ON p.venta_id = v.id INNER JOIN usuarios u ON u.id = v.usuario_id
+    LEFT JOIN clientes c ON c.id = v.cliente_id
      ${where} GROUP BY v.id ORDER BY v.fecha DESC LIMIT ? OFFSET ?`,
     [...params, limit, offset]
   )
@@ -242,6 +245,8 @@ export const listar = async (request, response) => {
     id: row.id,
     serie_numero: row.serie_numero,
     fecha: fechaHoraConOffset(row.fecha),
+    turno_id: row.turno_id,
+    cliente: row.cliente || null,
     metodo_pago: row.metodo_pago || null,
     total: Number(row.total),
     estado: row.estado,

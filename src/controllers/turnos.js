@@ -8,7 +8,13 @@ const FRANJAS = ['mañana', 'tarde', 'noche']
 const turnoRespuesta = (fila) => ({
   id: fila.id,
   apertura: fechaHoraConOffset(fila.apertura),
+  cierre: fila.cierre ? fechaHoraConOffset(fila.cierre) : null,
   fondo_inicial: dinero(fila.fondo_inicial),
+  ventas: dinero(fila.ventas),
+  ventas_efectivo: dinero(fila.ventas_efectivo),
+  efectivo_esperado: fila.efectivo_esperado == null ? null : dinero(fila.efectivo_esperado),
+  efectivo_contado: fila.efectivo_contado == null ? null : dinero(fila.efectivo_contado),
+  diferencia: fila.diferencia == null ? null : dinero(fila.diferencia),
   estado: fila.estado,
   franja: fila.franja,
   usuario_dni: fila.usuario_dni || null,
@@ -23,7 +29,14 @@ const validarMonto = (valor, campo) => {
 
 export const actual = async (request, response) => {
   const [rows] = await withConnection((connection) => connection.execute(
-    `SELECT t.id, t.apertura, t.fondo_inicial, t.estado, t.franja,
+    `SELECT t.id, t.apertura, t.cierre, t.fondo_inicial, t.efectivo_esperado,
+            t.efectivo_contado, t.estado, t.franja,
+            (SELECT COALESCE(SUM(v.total), 0) FROM ventas v WHERE v.turno_id = t.id AND v.estado = 'pagada') AS ventas,
+            (SELECT COALESCE(SUM(p.monto), 0)
+             FROM pagos p INNER JOIN ventas v ON v.id = p.venta_id
+             WHERE v.turno_id = t.id AND v.estado = 'pagada' AND p.metodo = 'efectivo') AS ventas_efectivo,
+            CASE WHEN t.efectivo_contado IS NULL THEN NULL
+                 ELSE t.efectivo_contado - t.efectivo_esperado END AS diferencia,
             u.dni AS usuario_dni, u.nombre AS usuario_nombre
      FROM turnos_caja t INNER JOIN usuarios u ON u.id = t.usuario_id
      WHERE t.usuario_id = ? AND t.estado = 'abierta'
@@ -33,20 +46,80 @@ export const actual = async (request, response) => {
   response.json(rows[0] ? turnoRespuesta(rows[0]) : null)
 }
 
+export const buscarTrabajador = async (request, response) => {
+  const dni = String(request.params.dni || '')
+  if (!/^\d{8}$/.test(dni)) throw new AppError('VALIDACION', 'El DNI debe tener 8 dígitos.', 400)
+  const [rows] = await withConnection((connection) => connection.execute(
+    'SELECT dni, nombre FROM usuarios WHERE dni = ? AND activo = 1 LIMIT 1',
+    [dni]
+  ))
+  if (!rows[0]) throw new AppError('TRABAJADOR_NO_ENCONTRADO', 'No se encontró un trabajador con ese DNI.', 404)
+  response.json({ dni: rows[0].dni, nombre: rows[0].nombre })
+}
+
+export const listar = async (request, response) => {
+  const page = Number.parseInt(request.query.page || '1', 10)
+  const limit = Number.parseInt(request.query.limit || '50', 10)
+  if (page < 1 || limit < 1 || limit > 100) {
+    throw new AppError('VALIDACION', 'page y limit no son válidos.', 400)
+  }
+  const own = request.usuario.rol !== 'admin'
+  const conditions = []
+  const params = []
+  if (own) {
+    conditions.push('t.usuario_id = ?')
+    params.push(request.usuario.id)
+  }
+  if (request.query.desde) {
+    conditions.push('t.apertura >= ?')
+    params.push(`${request.query.desde} 00:00:00`)
+  }
+  if (request.query.hasta) {
+    conditions.push('t.apertura <= ?')
+    params.push(`${request.query.hasta} 23:59:59`)
+  }
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''
+  const [count] = await withConnection((connection) => connection.execute(
+    `SELECT COUNT(*) AS total FROM turnos_caja t ${where}`,
+    params
+  ))
+  const offset = (page - 1) * limit
+  const [rows] = await withConnection((connection) => connection.execute(
+    `SELECT t.id, t.apertura, t.cierre, t.fondo_inicial, t.efectivo_esperado,
+            t.efectivo_contado, t.estado, t.franja,
+            (SELECT COALESCE(SUM(v.total), 0) FROM ventas v WHERE v.turno_id = t.id AND v.estado = 'pagada') AS ventas,
+            (SELECT COALESCE(SUM(p.monto), 0)
+             FROM pagos p INNER JOIN ventas v ON v.id = p.venta_id
+             WHERE v.turno_id = t.id AND v.estado = 'pagada' AND p.metodo = 'efectivo') AS ventas_efectivo,
+            CASE WHEN t.efectivo_contado IS NULL THEN NULL
+                 ELSE t.efectivo_contado - t.efectivo_esperado END AS diferencia,
+            u.dni AS usuario_dni, u.nombre AS usuario_nombre
+     FROM turnos_caja t INNER JOIN usuarios u ON u.id = t.usuario_id
+     ${where}
+     ORDER BY t.apertura DESC
+     LIMIT ? OFFSET ?`,
+    [...params, limit, offset]
+  ))
+  response.json({ data: rows.map(turnoRespuesta), page, limit, total: Number(count[0].total) })
+}
+
 export const abrir = async (request, response) => {
-  const { fondo_inicial: fondoInicial, franja } = request.body || {}
+  const { fondo_inicial: fondoInicial, franja, usuario_dni: usuarioDni } = request.body || {}
   validarMonto(fondoInicial, 'fondo_inicial')
   if (!FRANJAS.includes(franja)) {
     throw new AppError('VALIDACION', 'franja debe ser mañana, tarde o noche.', 400)
+  }
+  if (!/^\d{8}$/.test(String(usuarioDni || ''))) {
+    throw new AppError('VALIDACION', 'usuario_dni debe tener 8 dígitos.', 400)
   }
   const turno = await withConnection(async (connection) => {
     await connection.beginTransaction()
     try {
       const [usuario] = await connection.execute(
-        'SELECT id, dni, nombre FROM usuarios WHERE id = ? AND activo = 1 FOR UPDATE',
-        [request.usuario.id]
+        'SELECT id, dni, nombre FROM usuarios WHERE id = ? AND dni = ? AND activo = 1 FOR UPDATE',
+        [request.usuario.id, usuarioDni]
       )
-      if (!usuario[0]) throw new AppError('TOKEN_INVALIDO', 'El usuario del token ya no está activo.', 401)
+      if (!usuario[0]) throw new AppError('SIN_PERMISO', 'El DNI no corresponde al usuario autenticado.', 403)
       const [abiertos] = await connection.execute(
         "SELECT id FROM turnos_caja WHERE usuario_id = ? AND estado = 'abierta' LIMIT 1 FOR UPDATE",
         [request.usuario.id]
