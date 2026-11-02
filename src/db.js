@@ -1,5 +1,5 @@
-import mysql from 'mysql2/promise'
-import { config } from './config.js'
+import mysql from "mysql2/promise";
+import { config } from "./config.js";
 
 export const pool = mysql.createPool({
   host: config.db.host,
@@ -10,15 +10,15 @@ export const pool = mysql.createPool({
   waitForConnections: true,
   connectionLimit: 10,
   dateStrings: true,
-  timezone: '-05:00'
-})
+  timezone: "-05:00",
+});
 
 export const withConnection = async (callback) => {
-  const connection = await pool.getConnection()
+  const connection = await pool.getConnection();
   try {
-    await connection.query("SET time_zone = '-05:00'")
-    return await callback(connection)
+    await connection.query("SET time_zone = '-05:00'");
+    return await callback(connection);
   } finally {
-    connection.release()
+    connection.release();
   }
-}
+};
